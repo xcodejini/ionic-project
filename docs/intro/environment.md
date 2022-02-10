@@ -1,67 +1,57 @@
----
-title: Environment Setup
----
+# 실제서버
 
-<head>
-  <title>Environment Setup | Node & NPM Environment for Ionic App Setup</title>
-  <meta
-    name="description"
-    content="To get started with Ionic Framework, the only requirement is a Node & npm environment. Learn what environment setup is required for your Ionic apps."
-  />
-</head>
+실제 서버(Real Server)는 PAS-K의 부하 분산 서비스의 대상이 되는 장비를 의미합니다. 실제 서버는 웹 서버
+와 같은 일반적인 서버나 캐시 서버, 방화벽, VPN 장비, 게이트웨이가 될 수 있습니다. 각 부하 분산 서비스
+마다 서비스의 대상이 되는 실제 서버가 존재하고, PAS-K로 패킷이 수신되면 부하 분산 서비스는 설정된 규
+칙이나 부하 분산 방식에 따라 패킷을 처리할 실제 서버를 선택합니다. L7 부하 분산 서비스의 경우에는 실
+제 서버를 그룹으로 묶어서 그룹 별로 규칙이나 부하 분산 방식을 적용합니다.
 
-To get started with Ionic Framework, the only requirement is a [Node & npm](#node--npm) environment.
+앞에서 살펴본 각 부하 분산 서비스에서 실제 서버와 관련된 사항들이 설명되어 있습니다. 이 절에서는 앞에
+서 설명되지 않은 실제 서버와 관련된 다음 기능들에 대해서 알아보도록 합니다.
 
-Of course, a code editor is also required. [Visual Studio Code](https://code.visualstudio.com/) is recommended. Visual Studio Code is a free, batteries-included text editor made by Microsoft.
+- 최대 연결 세션 기능(Max Connection)
+- 백업 실제 서버 기능(Backup Real Server)
+- Graceful shutdown 기능
+- 최소 MTU 설정 기능
 
-## Terminal
+## 백업 실제 서버(Backup Real Server)
 
-:::note
-Much of Ionic development requires familiarity with the command line. If you're new to the command line, see [this Blog Post](https://ionicframework.com/blog/new-to-the-command-line/) for a quick introduction.
-:::
+백업 실제 서버는 실제 서버(마스터)가 더 이상 세션을 처리할 수 없는 상태가 되었을 때, 실제 서버의 역할
+을 대신 수행할 실제 서버(백업) 입니다. 다음과 같은 상황이 되면 PAS-K는 마스터 실제 서버가 세션을 처리
+할 수 없다고 판단하고 백업 서버를 통해 세션을 처리합니다.
 
-In general, we recommend using the built-in terminals. Many third-party terminals work well with Ionic, but may not be supported.
+- 장애 감시 결과 마스터 실제 서버가 동작하지 않는 것으로 판단되는 경우
+  이 경우에는 마스터 실제 서버에서 처리되던 기존 세션은 모두 해제되고, 이 후에 수신되는 새로운 세션
+  은 백업 서버로 전송됩니다.
+- 마스터 실제 서버가 처리 중인 세션의 수가 최대 세션 개수(Max Connection)에 도달한 경우
+  이 경우에는 마스터 실제 서버는 현재 세션만 처리하게 되고, 이 후에 수신되는 새로운 세션은 백업 서버
+  로 전송됩니다.
 
-- For Windows, **Command Prompt** and **PowerShell** are supported. <a href="https://docs.microsoft.com/en-us/windows/wsl/faq" target="_blank">WSL</a> is known to work with Ionic, but may not be supported.
-- For macOS, the built-in **Terminal** app is supported.
+마스터 실제 서버가 다시 동작 가능한 상태가 되면(장애 감시 결과 마스터 실제 서버가 다시 동작하는 것으
+로 판단되거나 마스터 실제 서버가 처리하는 세션 수가 최대 세션 개수보다 적어진 경우), 백업 실제 서버
+대신 마스터 실제 서버로 세션이 부하 분산됩니다. 백업 실제 서버는 L4 부하 분산 서비스와 고급 L7 부하
+분산 서비스에만 설정할 수 있으며 마스터 실제 서버가 다시 동작하면 그동안 백업 실제 서버가 처리하던 세션들을 모두 삭제합니다.
 
-Git Bash (from <a href="https://git-scm.com" target="_blank">git-scm.com</a>) does not support TTY interactivity and is **not supported** by Ionic.
+백업 서버를 지정하기 위한 조건은 다음과 같습니다.
 
-## Node & npm
+- 각 실제 서버마다 하나의 백업 서버를 지정할 수 있습니다.
+- 다른 실제 서버에 지정된 백업 서버는 지정할 수 없습니다.
+- 부하 분산 서비스에 설정된 실제 서버는 백업 서버로 지정할 수 없습니다.
 
-Almost all tooling for modern JavaScript projects is based in [Node.js](../reference/glossary.md#node). The [download page](https://nodejs.org/en/download/) has prebuilt installation packages for all platforms. We recommend selecting the LTS version to ensure best compatibility.
+## Graceful shutdown 기능
 
-Node is bundled with [npm](../reference/glossary.md#npm), the package manager for JavaScript.
+실제 서버에 Graceful shutdown 기능을 활성화하면 해당 실제 서버로 새로운 세션 요청이 할당되지 않습니
+다. 시간이 경과하여 기존의 세션이 모두 종료되면 실제 서버는 부하 분산 서비스에서 제외됩니다. 실제 서
+버를 부하 분산 서비스에서 제외시킬 수 있는 다른 방법으로 실제 서버를 비활성화하는 방법이 있습니다.
+Graceful shutdown은 기존의 서비스에 영향을 주지 않으면서 실제 서버를 제거할 수 있는 반면, 실제 서버를
+비활성화하면 실제 서버에 연결된 세션이 모두 종료됩니다. Graceful shutdown 기능은 L4와 L7 부하 분산 서
+비스의 실제 서버에 모두 사용할 수 있고, 기능의 사용 여부는 각 실제 서버마다 설정할 수 있습니다.
 
-To verify the installation, open a new terminal window and run:
+## 선점 기능
 
-```shell
-$ node --version
-$ npm --version
-```
-
-:::note
-Permission errors are common on macOS when installing global packages with `npm`. If you get an `EACCES` error, see [Resolving Permission Errors](../developing/tips.md#resolving-permission-errors).
-:::
-
-## Git
-
-Although not required, the version control system [Git](../reference/glossary.md#git) is highly recommended.
-
-Git is often accompanied by a Git Host, such as [GitHub](https://github.com/), in which case additional setup is required. Follow the tutorial from the Git Host's documentation to set up Git:
-
-- GitHub: [Set up Git](https://help.github.com/en/articles/set-up-git)
-- GitLab: [Installing Git](https://docs.gitlab.com/ee/topics/git/how_to_install_git)
-- Bitbucket: [Install Git](https://www.atlassian.com/git/tutorials/install-git)
-
-Otherwise, follow the [official installation instructions](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git). The command-line utility can be downloaded from the [download page](https://git-scm.com/downloads).
-
-To verify the installation, open a new terminal window and run:
-
-```shell
-$ git --version
-```
-
-### Git GUI
-
-Git is a command-line utility, but there are many [GUI clients](https://git-scm.com/downloads/guis/) available. [GitHub Desktop](https://desktop.github.com/) is recommended, and works well with GitHub.
+마스터 실제 서버가 세션을 처리할 수 없는 상태가 되면, 백업 실제 서버가 마스터 실제 서버의 역할을 대신
+수행합니다. 이 후, 마스터 실제 서버가 다시 정상적으로 세션을 처리할 수 있는 상태가 되었을 때, 백업 실
+제 서버가 계속해서 세션을 처리할 지 또는 마스터 실제 서버가 세션을 처리할 지 지정할 수 있습니다. PASK는 기본적으로 마스터 실제 서버가 세션을 처리(마스터 실제 서버가 선점)하도록 되어 있으며, 마스터 실제
+서버에서 선점 기능을 비활성화하면 백업 실제 서버가 계속해서 세션을 처리합니다. 선점 기능은 L4 부하 분
+산 서비스에서만 사용할 수 있습니다. 최대 연결 세션 기능에 의해 마스터 실제 서버가 세션을 처리하지 않
+게 되는 경우에는 선점 기능이 동작하지 않습니다
